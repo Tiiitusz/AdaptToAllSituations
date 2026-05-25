@@ -136,7 +136,6 @@ class main():
         self.setOutput(numberOfWins)
 
     def getWonChamps(self, noWins):
-        file = open(f"data/{self.APIHandler.getPUUID()}.json", "w")
         stringbuilder = ""
         while len(self.champsWon) < noWins:
             ams = self.APIHandler.getMatches(20)
