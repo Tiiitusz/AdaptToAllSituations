@@ -116,6 +116,9 @@ class RiotAPIHandler:
         }
         return region_to_platform.get(normalized, normalized.lower())
 
+    def getStartMatch(self):
+        return self.startMatch
+
     def getPUUID(self):
         if self.puuid == None:
             data = self.getAccountByRiotID()

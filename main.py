@@ -138,6 +138,10 @@ class main():
     def getWonChamps(self, noWins):
         stringbuilder = ""
         while len(self.champsWon) < noWins:
+            start = self.APIHandler.getStartMatch()
+            if start > 879:
+                self.setOutput(f"Reached end of match history at offset {start}. Found {len(self.champsWon)} wins out of {noWins}.")
+                return
             ams = self.APIHandler.getMatches(20)
             for am in ams:
                 if am["PlayerScore0"] == 1 and am["championName"] not in self.champsWon:
