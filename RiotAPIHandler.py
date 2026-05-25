@@ -151,11 +151,14 @@ class RiotAPIHandler:
             return []
 
         url = f"{self.base_url}/lol/match/v5/matches/by-puuid/{puuid}/ids?start={self.startMatch}&count={count}"
-        self.startMatch += count
 
         data = self.URLRequest(url)
-        if data is None:
+        # treat empty list (no IDs) the same as None: no more history available
+        if not data:
             return []
+
+        # only advance the start offset when we successfully received IDs
+        self.startMatch += count
 
         def fetch_match(matchId):
             url = f"{self.base_url}/lol/match/v5/matches/{matchId}"

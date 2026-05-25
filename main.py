@@ -105,7 +105,10 @@ class main():
         self.champsWon = []
         if os.path.exists(f"data/{self.APIHandler.getPUUID()}.json"):
             with open(f"data/{self.APIHandler.getPUUID()}.json", "r") as f:
-                self.champsWon = json.load(f)
+                try:
+                    self.champsWon = json.load(f)
+                except json.JSONDecodeError:
+                    self.champsWon = []
         else:
             with open(f"data/{self.APIHandler.getPUUID()}.json", "w") as f:
                 json.dump(self.champsWon, f)
