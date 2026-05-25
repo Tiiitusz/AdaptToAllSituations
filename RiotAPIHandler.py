@@ -5,7 +5,10 @@ class RiotAPIHandler:
         self.api_key = api_key
         self.region = region
         self.routing_region = self._resolve_routing_region(region)
+        self.platform = self._resolve_platform(region)
         self.base_url = f"https://{self.routing_region}.api.riotgames.com"
+        self.platform_url = f"https://{self.platform}.api.riotgames.com"
+        self.ATAS_challengeID = 602002
 
     def _resolve_routing_region(self, region):
         normalized = region.strip().upper()
@@ -35,6 +38,28 @@ class RiotAPIHandler:
 
         return platform_to_routing.get(normalized, normalized.lower())
 
+    def _resolve_platform(self, region):
+        normalized = region.strip().upper()
+        region_to_platform = {
+            "NA": "na1", "NA1": "na1",
+            "BR": "br1", "BR1": "br1",
+            "LAN": "la1", "LA1": "la1",
+            "LAS": "la2", "LA2": "la2",
+            "OCE": "oc1", "OC1": "oc1",
+            "EUNE": "eun1", "EUN1": "eun1",
+            "EUW": "euw1", "EUW1": "euw1",
+            "TR": "tr1", "TR1": "tr1",
+            "RU": "ru", "RU1": "ru",
+            "KR": "kr", "KR1": "kr",
+            "JP": "jp1", "JP1": "jp1",
+            "PH": "ph2", "PH2": "ph2",
+            "SG": "sg2", "SG2": "sg2",
+            "TH": "th2", "TH2": "th2",
+            "TW": "tw2", "TW2": "tw2",
+            "VN": "vn2", "VN2": "vn2",
+        }
+        return region_to_platform.get(normalized, normalized.lower())
+
 
     def getAccountByRiotID(self, gameName, tagLine):
         headers = {
@@ -44,8 +69,31 @@ class RiotAPIHandler:
         try:
             response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
-            print(response.json())
-            return response.json()
+            data = response.json()
+            self.puuid = data.get("puuid")
+            print(data)
+            return data
+        except requests.exceptions.RequestException as exc:
+            print(f"Request failed for URL: {url}")
+            print(f"Error: {exc}")
+            return None
+
+    def getATASProgress(self, gameName, tagLine):
+        data = self.getAccountByRiotID(gameName, tagLine)
+        puuid = data.get("puuid")
+        headers = {
+            "X-Riot-Token": self.api_key
+        }
+        url = f"{self.platform_url}/lol/challenges/v1/player-data/{puuid}"
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+            for challange in data.get("challenges", []):
+                if(challange["challengeId"] == self.ATAS_challengeID):
+                    return challange["value"]
+            return 0
         except requests.exceptions.RequestException as exc:
             print(f"Request failed for URL: {url}")
             print(f"Error: {exc}")

@@ -21,6 +21,7 @@ class main():
     def init_ui(self):
         self.api_key = ft.TextField(
             label="Riot API Key",
+            value="RGAPI-8fc73704-7017-4c6c-8167-77468679a1b1",
             password=True,
             can_reveal_password=True,
             autofocus=True,
@@ -79,7 +80,7 @@ class main():
                                 ft.ElevatedButton(
                                     "Fetch Account",
                                     icon=self.icons.SEARCH,
-                                    on_click=self.fetch_account,
+                                    on_click=self.initAPIHandler,
                                 ),
                                 self.loading_ring,
                             ]
@@ -95,26 +96,35 @@ class main():
         self.page.snack_bar = ft.SnackBar(content=ft.Text(message), open=True)
         self.page.update()
 
-    def fetch_account(self, _):
-        if not self.api_key.value or not self.region.value or not self.game_name.value or not self.tag_line.value:
-            self.show_error("Please fill in all fields.")
-            return
+    def initAPIHandler(self, _):
+        if not self.api_key.value or not self.region.value:
+            self.show_error("Please fill in API key and region.")
+            return None
         
+        self.APIHandler = RiotAPIHandler.RiotAPIHandler(self.api_key.value.strip(), self.region.value.strip())
+        self.fetch_atasProgress()
+    
+    def fetch_account(self):
         self.loading_ring.visible = True
-        self.output.value = "Fetching account..."
-        self.page.update()
-
-        handler = RiotAPIHandler.RiotAPIHandler(self.api_key.value.strip(), self.region.value.strip())
-        data = handler.getAccountByRiotID(self.game_name.value.strip(), self.tag_line.value.strip())
-
+        self.setOutput("Fetching account...")
+        data = self.APIHandler.getAccountByRiotID(self.game_name.value.strip(), self.tag_line.value.strip())
         self.loading_ring.visible = False
+        self.setOutput(data)
+
+    def fetch_atasProgress(self):
+        self.loading_ring.visible = True
+        self.setOutput("Fetching ATAS progress...")
+        numberOfWins = self.APIHandler.getATASProgress(self.game_name.value.strip(), self.tag_line.value.strip())
+        self.loading_ring.visible = False
+        self.setOutput(numberOfWins)
+
+
+    def setOutput(self, data):
         if data is None:
             self.output.value = "Request failed. Check API key, Riot ID, and region."
         else:
             self.output.value = json.dumps(data, indent=2)
         self.page.update()
-
-    
 
 if __name__ == "__main__":
     ft.app(target=main)
