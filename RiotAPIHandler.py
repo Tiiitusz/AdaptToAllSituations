@@ -1,14 +1,70 @@
 import requests
+import json
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class RiotAPIHandler:
-    def __init__(self, api_key, region):
+    def __init__(self, api_key, region, game_name="", tag_line=""):
         self.api_key = api_key
         self.region = region
+        self.game_name = game_name
+        self.tag_line = tag_line
         self.routing_region = self._resolve_routing_region(region)
         self.platform = self._resolve_platform(region)
         self.base_url = f"https://{self.routing_region}.api.riotgames.com"
         self.platform_url = f"https://{self.platform}.api.riotgames.com"
         self.ATAS_challengeID = 602002
+        self.puuid = None
+        self.startMatch = 0
+        self.min_request_interval = 0.01
+        self.max_retries = 5
+        self.lastRequestTs = 0.0
+
+    def spaceRequests(self):
+        elapsed = time.monotonic() - self.lastRequestTs
+        if elapsed < self.min_request_interval:
+            print("Slowing requests to avoid hitting rate limits for time " + str(self.min_request_interval - elapsed) + " seconds.")
+            time.sleep(self.min_request_interval - elapsed)
+        self.lastRequestTs = time.monotonic()
+
+    def URLRequest(self, url):
+        print(f"Requesting URL: {url}")
+        headers = {
+            "X-Riot-Token": self.api_key
+        }
+
+        for attempt in range(self.max_retries + 1):
+            self.spaceRequests()
+
+            try:
+                response = requests.get(url, headers=headers, timeout=15)
+            except requests.exceptions.RequestException as exc:
+                print(f"Request exception for URL: {url}")
+                if attempt == self.max_retries:
+                    print(f"Request failed for URL: {url}")
+                    print(f"Error: {exc}")
+                    return None
+                time.sleep(self.min_request_interval * (attempt + 1))
+                continue
+
+            if response.status_code == 429:
+                retry_after = float(response.headers.get("Retry-After", "1"))
+                time.sleep(max(retry_after, self.min_request_interval))
+                continue
+
+            try:
+                response.raise_for_status()
+                return response.json()
+            except requests.exceptions.RequestException as exc:
+                if attempt == self.max_retries:
+                    print(f"Request failed for URL: {url}")
+                    print(f"Error: {exc}")
+                    return None
+                time.sleep(self.min_request_interval * (attempt + 1))
+
+        print(f"Request failed for URL: {url}")
+        print("Error: max retries exceeded")
+        return None
 
     def _resolve_routing_region(self, region):
         normalized = region.strip().upper()
@@ -60,41 +116,65 @@ class RiotAPIHandler:
         }
         return region_to_platform.get(normalized, normalized.lower())
 
-
-    def getAccountByRiotID(self, gameName, tagLine):
-        headers = {
-            "X-Riot-Token": self.api_key
-        }
-        url = f"{self.base_url}/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}"
-        try:
-            response = requests.get(url, headers=headers, timeout=15)
-            response.raise_for_status()
-            data = response.json()
+    def getPUUID(self):
+        if self.puuid == None:
+            data = self.getAccountByRiotID()
             self.puuid = data.get("puuid")
-            print(data)
-            return data
-        except requests.exceptions.RequestException as exc:
-            print(f"Request failed for URL: {url}")
-            print(f"Error: {exc}")
+        return self.puuid
+
+    def getAccountByRiotID(self):
+        url = f"{self.base_url}/riot/account/v1/accounts/by-riot-id/{self.game_name}/{self.tag_line}"
+        data = self.URLRequest(url)
+        if data is not None:
+            self.puuid = data.get("puuid")
+        return data
+
+    def getATASProgress(self):
+        data = self.getAccountByRiotID()
+        if data is None:
             return None
 
-    def getATASProgress(self, gameName, tagLine):
-        data = self.getAccountByRiotID(gameName, tagLine)
         puuid = data.get("puuid")
-        headers = {
-            "X-Riot-Token": self.api_key
-        }
         url = f"{self.platform_url}/lol/challenges/v1/player-data/{puuid}"
-        
-        try:
-            response = requests.get(url, headers=headers, timeout=15)
-            response.raise_for_status()
-            data = response.json()
-            for challange in data.get("challenges", []):
-                if(challange["challengeId"] == self.ATAS_challengeID):
-                    return challange["value"]
-            return 0
-        except requests.exceptions.RequestException as exc:
-            print(f"Request failed for URL: {url}")
-            print(f"Error: {exc}")
+        data = self.URLRequest(url)
+        if data is None:
             return None
+
+        for challange in data.get("challenges", []):
+            if challange["challengeId"] == self.ATAS_challengeID:
+                return challange["value"]
+        return 0
+        
+    def getMatches(self, count=20):
+        puuid = self.getPUUID()
+        if puuid is None:
+            return []
+
+        url = f"{self.base_url}/lol/match/v5/matches/by-puuid/{puuid}/ids?start={self.startMatch}&count={count}"
+        self.startMatch += count
+
+        data = self.URLRequest(url)
+        if data is None:
+            return []
+
+        def fetch_match(matchId):
+            url = f"{self.base_url}/lol/match/v5/matches/{matchId}"
+            matchData = self.URLRequest(url)
+            if matchData is None:
+                return None
+            if matchData["info"]["gameMode"] != "CHERRY":
+                return None
+            for participant in matchData["info"]["participants"]:
+                if participant["puuid"] == puuid:
+                    return participant
+            return None
+
+        arenaGames = []
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(fetch_match, matchId): matchId for matchId in data}
+            for future in as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    arenaGames.append(result)
+        return arenaGames
+        

@@ -1,5 +1,8 @@
 import json
+import time
 import flet as ft
+import os
+
 import RiotAPIHandler
 
 class main():
@@ -17,6 +20,8 @@ class main():
 
         self.init_ui()
         self.build()
+
+        self.champsWon = []
 
     def init_ui(self):
         self.api_key = ft.TextField(
@@ -96,34 +101,76 @@ class main():
         self.page.snack_bar = ft.SnackBar(content=ft.Text(message), open=True)
         self.page.update()
 
+    def initChampsWon(self):
+        self.champsWon = []
+        if os.path.exists(f"data/{self.APIHandler.getPUUID()}.json"):
+            with open(f"data/{self.APIHandler.getPUUID()}.json", "r") as f:
+                self.champsWon = json.load(f)
+        else:
+            with open(f"data/{self.APIHandler.getPUUID()}.json", "w") as f:
+                json.dump(self.champsWon, f)
+
     def initAPIHandler(self, _):
-        if not self.api_key.value or not self.region.value:
-            self.show_error("Please fill in API key and region.")
+        if not self.api_key.value or not self.region.value or not self.game_name.value or not self.tag_line.value:
+            self.show_error("Please fill in API key, region, game name, and tag line.")
             return None
         
-        self.APIHandler = RiotAPIHandler.RiotAPIHandler(self.api_key.value.strip(), self.region.value.strip())
-        self.fetch_atasProgress()
+        self.APIHandler = RiotAPIHandler.RiotAPIHandler(self.api_key.value.strip(), self.region.value.strip(), self.game_name.value.strip(), self.tag_line.value.strip())
+        self.getAccountInfo()
     
     def fetch_account(self):
         self.loading_ring.visible = True
         self.setOutput("Fetching account...")
-        data = self.APIHandler.getAccountByRiotID(self.game_name.value.strip(), self.tag_line.value.strip())
+        data = self.APIHandler.getAccountByRiotID()
         self.loading_ring.visible = False
         self.setOutput(data)
 
     def fetch_atasProgress(self):
         self.loading_ring.visible = True
         self.setOutput("Fetching ATAS progress...")
-        numberOfWins = self.APIHandler.getATASProgress(self.game_name.value.strip(), self.tag_line.value.strip())
+        numberOfWins = self.APIHandler.getATASProgress()
         self.loading_ring.visible = False
         self.setOutput(numberOfWins)
+
+    def getWonChamps(self, noWins):
+        file = open(f"data/{self.APIHandler.getPUUID()}.json", "w")
+        stringbuilder = ""
+        while len(self.champsWon) < noWins:
+            ams = self.APIHandler.getMatches(20)
+            for am in ams:
+                if am["PlayerScore0"] == 1 and am["championName"] not in self.champsWon:
+                    file = open(f"data/{self.APIHandler.getPUUID()}.json", "w") 
+                    self.champsWon.append(am["championName"])
+                    json.dump(self.champsWon, file)
+                    file.close()
+                    stringbuilder = f"Found win with {am['championName']}!\n" + stringbuilder
+                    self.setOutput(f"Total wins found: {len(self.champsWon)} out of {noWins} \n" + stringbuilder)
+            
+
+    def getAccountInfo(self):
+        self.loading_ring.visible = True
+        self.setOutput("Fetching account wins...")
+        noWins = self.APIHandler.getATASProgress()
+        self.initChampsWon()
+        print(self.champsWon)
+        self.setOutput(f"Number of wins: {noWins}, fetching match history...")
+        self.getWonChamps(noWins)
+        self.loading_ring.visible = False
+        self.setOutput(f"Fetched {len(self.champsWon)} champions.")
 
 
     def setOutput(self, data):
         if data is None:
             self.output.value = "Request failed. Check API key, Riot ID, and region."
         else:
-            self.output.value = json.dumps(data, indent=2)
+            if isinstance(data, str):
+                # preserve user-provided newlines in plain strings
+                self.output.value = data
+            else:
+                try:
+                    self.output.value = json.dumps(data, indent=2)
+                except Exception:
+                    self.output.value = str(data)
         self.page.update()
 
 if __name__ == "__main__":
