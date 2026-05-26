@@ -14,11 +14,11 @@ class RiotAPIHandler:
         self.base_url = f"https://{self.routing_region}.api.riotgames.com"
         self.platform_url = f"https://{self.platform}.api.riotgames.com"
         self.ATAS_challengeID = 602002
-        self.puuid = None
         self.startMatch = 0
         self.min_request_interval = 0.01
         self.max_retries = 5
         self.lastRequestTs = 0.0
+        self.puuid = self.getAccountByRiotID().get("puuid")
 
     def spaceRequests(self):
         elapsed = time.monotonic() - self.lastRequestTs
@@ -120,9 +120,6 @@ class RiotAPIHandler:
         return self.startMatch
 
     def getPUUID(self):
-        if self.puuid == None:
-            data = self.getAccountByRiotID()
-            self.puuid = data.get("puuid")
         return self.puuid
 
     def getAccountByRiotID(self):
@@ -154,7 +151,7 @@ class RiotAPIHandler:
             return []
 
         url = f"{self.base_url}/lol/match/v5/matches/by-puuid/{puuid}/ids?start={self.startMatch}&count={count}"
-
+        
         data = self.URLRequest(url)
         # treat empty list (no IDs) the same as None: no more history available
         if not data:
@@ -169,6 +166,7 @@ class RiotAPIHandler:
             if matchData is None:
                 return None
             if matchData["info"]["gameMode"] != "CHERRY":
+                print(f"Skipping match {matchId} with game mode {matchData['info']['gameMode']}")
                 return None
             for participant in matchData["info"]["participants"]:
                 if participant["puuid"] == puuid:
