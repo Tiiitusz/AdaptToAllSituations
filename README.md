@@ -1,2 +1,6 @@
-Install python, pip install flet, time, json and Path
-To run just run inside the git folder python main.py
+```
+pip install flet
+pip install json
+pip install Path
+python main.py
+```
