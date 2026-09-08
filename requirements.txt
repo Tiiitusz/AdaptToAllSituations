@@ -1,3 +1,7 @@
 flet==0.28.3
 requests>=2.32.0
 screen-brightness-control>=0.23.0
+pip install flet
+pip install json
+pip install Path
+python main.py
